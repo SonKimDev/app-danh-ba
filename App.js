@@ -1,19 +1,78 @@
-import { Button, FlatList, Image, Keyboard, Modal, SafeAreaView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
-import React, {useState} from 'react'
+import { Alert, Button, FlatList, Image, Keyboard, Modal, SafeAreaView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
+import React, {useEffect, useState} from 'react'
 import FontAwesome from 'react-native-vector-icons/dist/FontAwesome';
 import Ionicons from 'react-native-vector-icons/dist/Ionicons';
 import {launchCamera, launchImageLibrary} from 'react-native-image-picker';
+import DetailModal from './components/Modals/DetailModal';
+import { Swipeable } from 'react-native-gesture-handler';
+import EditModal from './components/Modals/EditModal';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 
 const App = () => {
   const defaultAvatar = require('./images/defaultImage.jpg');
   const [data, setData] = useState([]);
   const [isShowAddModal, setIsShowAddModal] = useState(false);
+  const [isShowEditModal, setIsShowEditModal] = useState(false);
+  const [isShowDetailt, setIsShowDetail] = useState(false);
+  const [selectedItem, setSelectedItem] = useState(null);
+  const [indexItem, setIndexItem] = useState(null);
   const [contactName, setContactName] = useState("");
   const [contactAvatar, setContactAvatar] = useState(null);
   const [contactDescription, setContactDescription] = useState("");
   const [contactPhoneNumber, setContactPhoneNumber] = useState(null);
   const [contactEmail, setContactEmail] = useState("");
+  const [isSort, setIsSort] = useState(true);
   
+  useEffect(() => {
+    const loadData = async () => {
+      const dataStorage = await AsyncStorage.getItem("data");
+      try {
+        if(dataStorage!=null){
+          setData(JSON.parse(dataStorage));
+        }
+        console.log("load data successfully");
+      } catch (error) {
+        setData([]);
+        console.log("error is: ",error);
+      }
+    }
+    loadData();
+  }, [])
+
+  useEffect(() => {
+    const savedData = async () => {
+      try {
+        await AsyncStorage.setItem("data",JSON.stringify(data));
+        console.log("them thanh cong");
+      } catch (error) {
+        console.log("error is: ",error);
+      }
+    }
+    savedData();
+  }, [data])
+  
+  useEffect(() => {
+    // Hàm này sẽ thực hiện sắp xếp dữ liệu dựa trên ascendingOrder
+    const sortedData = [...data].sort((a, b) => {
+      if (a.name < b.name) return isSort ? -1 : 1;
+      if (a.name > b.name) return isSort ? 1 : -1;
+      return 0;
+    });
+    setData(sortedData);
+  }, [isSort]);
+
+  const handleSort = () => {
+    setIsSort(!isSort);
+  }
+
+  const handleEdit = (editContact) => {
+    console.log(editContact);
+    const newData = [...data];
+    newData[indexItem] = editContact;
+    setData(newData);
+    setIsShowEditModal(false);
+  }
 
   const selectAvatar = () => {
     const option = {
@@ -31,10 +90,6 @@ const App = () => {
         setContactAvatar(response.assets[0].uri);
       }
     });
-  };
-
-  const showContactAvatar = () => {
-    console.log(contactAvatar);
   };
 
   const closeModalAdd = () => {
@@ -55,23 +110,56 @@ const App = () => {
   }
 
   const renderItem = ({item,index}) => {
-    return(
-      <TouchableOpacity style={styles.itemContainer}>
-        <View style={styles.itemContent}>
-          <Image
-          source={item.avatar ? {uri:item.avatar} : defaultAvatar}
-          style={styles.image}
-          />
-          <View>
-            <Text style={styles.itemLabel}>
-              {item.name}
-            </Text>
-            <Text style={styles.itemDescription}>
-              {item.description}
-            </Text>
-          </View>
+
+    const handleDetail = () => {
+      setSelectedItem(item)
+      setIsShowDetail(true)
+    }
+
+    const renderRightActions = () => {
+
+      const showModalEdit = () => {
+        setIsShowEditModal(true);
+        setIndexItem(index);
+      }
+
+      const handleDelete = () => {
+        const updateData = [...data];
+        updateData.splice(index,1);
+        setData(updateData);
+      }
+
+      return (
+        <View style={{flexDirection: "row",}} onPress={()=>handleDelete()}>
+          <TouchableOpacity style={{backgroundColor: "green", justifyContent: "center", alignItems: "center", width: 70,}} onPress={()=>showModalEdit()}>
+            <FontAwesome name='pencil' size={30} color={"#ffffff"}/>
+          </TouchableOpacity>
+          <TouchableOpacity style={{backgroundColor: "red",justifyContent: "center", alignItems: "center", width: 70,}} onPress={()=>handleDelete()}>
+            <FontAwesome name='trash-o' size={30} color={"#ffffff"}/>
+          </TouchableOpacity>
         </View>
-      </TouchableOpacity>
+      );
+    };
+
+    return(
+      <Swipeable renderRightActions={renderRightActions}>
+        <TouchableOpacity style={styles.itemContainer} onPress={()=>handleDetail()}>
+          <View style={styles.itemContent}>
+            <Image
+            source={item.avatar ? {uri:item.avatar} : defaultAvatar}
+            style={styles.image}
+            />
+            <View>
+              <Text style={styles.itemLabel}>
+                {item.name}
+              </Text>
+              <Text style={styles.itemDescription}>
+                {item.description}
+              </Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Swipeable>
     )
   }
 
@@ -80,8 +168,11 @@ const App = () => {
       <Text style={styles.title}>All Contact</Text>
       <View style={styles.searchContainer}>
         <TextInput placeholder='Search' style={styles.searchInput}/>
-        <TouchableOpacity style={styles.sort}>
-          <FontAwesome name="sort-alpha-asc" size={16} color={"#8d8c90"}/>
+        <TouchableOpacity style={styles.sort} onPress={handleSort}>
+          {isSort
+          ? <FontAwesome name="sort-alpha-asc" size={16} color={"#8d8c90"}/> 
+          : <FontAwesome name="sort-alpha-desc" size={16} color={"#8d8c90"}/>
+          }          
         </TouchableOpacity>
       </View>
       <View style={styles.line}></View>
@@ -120,10 +211,19 @@ const App = () => {
               <Button title='Thêm' color={"#499cff"} onPress={()=>handleAddContact()}/>
               <Button title='Đóng' color={"#D3D3D3"} onPress={()=>closeModalAdd()}/>
             </View>
-            <Button title="Show Avatar URI" onPress={showContactAvatar} />
           </View>
         </View>
       </Modal>
+      <DetailModal
+        visible={isShowDetailt}
+        onClose={()=>setIsShowDetail(false)}
+        item={selectedItem}
+      />
+      <EditModal
+        visible={isShowEditModal}
+        onClose={()=>setIsShowEditModal(false)}
+        onEdit={handleEdit}
+      />
     </SafeAreaView>
   )
 }
